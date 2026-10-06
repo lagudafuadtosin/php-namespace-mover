@@ -20,7 +20,7 @@ suite('PhpCodeActionProvider (VS Code Integration)', () => {
                 : vscode.DiagnosticSeverity.Hint
         );
         diag.code = code;
-        diag.source = 'PHP Namespace Resolver';
+        diag.source = 'PHP Namespace Mover';
         return diag;
     }
 
@@ -49,12 +49,12 @@ suite('PhpCodeActionProvider (VS Code Integration)', () => {
 
         const importAction = actions.find(a => a.title === 'Import class');
         assert.ok(importAction, 'Should have Import class action');
-        assert.strictEqual(importAction!.command?.command, 'phpNamespaceResolver.import');
+        assert.strictEqual(importAction!.command?.command, 'phpNamespaceMover.import');
         assert.strictEqual(importAction!.isPreferred, true);
 
         const expandAction = actions.find(a => a.title === 'Expand to fully qualified name');
         assert.ok(expandAction, 'Should have Expand action');
-        assert.strictEqual(expandAction!.command?.command, 'phpNamespaceResolver.expand');
+        assert.strictEqual(expandAction!.command?.command, 'phpNamespaceMover.expand');
     });
 
     test('should provide remove action for unused import', async () => {
@@ -82,7 +82,7 @@ suite('PhpCodeActionProvider (VS Code Integration)', () => {
 
         const removeAction = actions[0];
         assert.strictEqual(removeAction.title, 'Remove unused import');
-        assert.strictEqual(removeAction.command?.command, 'phpNamespaceResolver.removeUnused');
+        assert.strictEqual(removeAction.command?.command, 'phpNamespaceMover.removeUnused');
         assert.strictEqual(removeAction.isPreferred, true);
     });
 
@@ -180,7 +180,7 @@ suite('PhpCodeActionProvider (VS Code Integration)', () => {
             vscode.DiagnosticSeverity.Warning
         );
         diag.code = 'unknown-code';
-        diag.source = 'PHP Namespace Resolver';
+        diag.source = 'PHP Namespace Mover';
 
         const context: vscode.CodeActionContext = {
             diagnostics: [diag],

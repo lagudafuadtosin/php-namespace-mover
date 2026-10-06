@@ -2,9 +2,10 @@ import * as vscode from 'vscode';
 import { CacheEntry, PersistedIndex } from '../types';
 import { getConfig } from '../utils/config';
 import { showStatusMessage } from '../utils/statusBar';
+import { declaredClasses } from './php/analysis';
 
 export class NamespaceCache implements vscode.Disposable {
-    private static readonly INDEX_VERSION = 1;
+    private static readonly INDEX_VERSION = 2;
     private static readonly INDEX_FILE_NAME = 'namespace-index.json';
 
     private cache = new Map<string, CacheEntry[]>();
@@ -60,6 +61,18 @@ export class NamespaceCache implements vscode.Disposable {
         return this.cache.has(className) && this.cache.get(className)!.length > 0;
     }
 
+    /** Short names of the indexed classes declared directly in `namespace`. */
+    classesInNamespace(namespace: string): string[] {
+        const prefix = namespace.toLowerCase() + '\\';
+        const names: string[] = [];
+        for (const [className, entries] of this.cache) {
+            if (entries.some(e => e.fqcn.toLowerCase() === prefix + className.toLowerCase())) {
+                names.push(className);
+            }
+        }
+        return names;
+    }
+
     dispose(): void {
         clearTimeout(this.persistTimer);
         for (const timer of this.pendingChanges.values()) { clearTimeout(timer); }
@@ -74,7 +87,7 @@ export class NamespaceCache implements vscode.Disposable {
         if (!this._indexed) { return; }
         this._indexed = false;
 
-        showStatusMessage('$(sync~spin) PHP Namespace Resolver: Indexing...', 60000);
+        showStatusMessage('$(sync~spin) PHP Namespace Mover: Indexing...', 60000);
 
         try {
             const exclude = getConfig('exclude');
@@ -86,7 +99,7 @@ export class NamespaceCache implements vscode.Disposable {
                 await Promise.all(batch.map(uri => this.indexFile(uri)));
             }
         } finally {
-            showStatusMessage('$(check) PHP Namespace Resolver: Indexing complete.', 3000);
+            showStatusMessage('$(check) PHP Namespace Mover: Indexing complete.', 3000);
             this._indexed = true;
             this._onDidFinishIndexing.fire();
         }
@@ -122,7 +135,7 @@ export class NamespaceCache implements vscode.Disposable {
     }
 
     private async incrementalUpdate(): Promise<void> {
-        showStatusMessage('$(sync~spin) PHP Namespace Resolver: Updating index...', 60000);
+        showStatusMessage('$(sync~spin) PHP Namespace Mover: Updating index...', 60000);
 
         try {
             const exclude = getConfig('exclude');
@@ -172,7 +185,7 @@ export class NamespaceCache implements vscode.Disposable {
                 this._onDidFinishIndexing.fire();
             }
         } finally {
-            showStatusMessage('$(check) PHP Namespace Resolver: Index up to date.', 3000);
+            showStatusMessage('$(check) PHP Namespace Mover: Index up to date.', 3000);
         }
     }
 
@@ -186,34 +199,20 @@ export class NamespaceCache implements vscode.Disposable {
 
             this.removeFile(uri);
 
-            const uriString = uri.toString();
-            const nsMatch = text.match(/^(?:namespace|<\?php\s+namespace)\s+(.+?);/m);
-            if (!nsMatch) {
-                // Record in fileIndex with empty entries to avoid re-reading next startup
-                this.fileIndex.set(uriString, { mtime: stat.mtime, entries: [] });
-                return;
-            }
-
-            const namespace = nsMatch[1].trim();
-            const entries: { fqcn: string; className: string }[] = [];
-
-            const declRegex = /^\s*(?:abstract\s+|final\s+|readonly\s+)*(?:class|trait|interface|enum)\s+(\w+)/gm;
-            let match: RegExpExecArray | null;
-
-            while ((match = declRegex.exec(text)) !== null) {
-                const className = match[1];
-                const fqcn = `${namespace}\\${className}`;
-
+            // Declarations come from the tokenizer: classes in comments or strings are skipped,
+            // files with several namespaces are read correctly, and global classes (no
+            // namespace) are indexed too. A file with none is still recorded, so the next
+            // start-up does not read it again.
+            const entries = declaredClasses(text);
+            for (const { fqcn, className } of entries) {
                 const cacheEntry: CacheEntry = { fqcn, uri, className };
-
                 if (!this.cache.has(className)) {
                     this.cache.set(className, []);
                 }
                 this.cache.get(className)!.push(cacheEntry);
-                entries.push({ fqcn, className });
             }
 
-            this.fileIndex.set(uriString, { mtime: stat.mtime, entries });
+            this.fileIndex.set(uri.toString(), { mtime: stat.mtime, entries });
         } catch {}
     }
 

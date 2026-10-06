@@ -4,6 +4,8 @@ import { DeclarationParser } from '../core/DeclarationParser';
 import { requireActiveEditor } from '../utils/editor';
 import { showStatusMessage } from '../utils/statusBar';
 import { getConfig } from '../utils/config';
+import { UseStatement } from '../types';
+import { withoutEntries } from '../core/useStatementEdit';
 
 export class RemoveUnusedCommand {
     constructor(
@@ -26,36 +28,50 @@ export class RemoveUnusedCommand {
     }
 
     async removeUnused(editor: vscode.TextEditor): Promise<number> {
-        const text = editor.document.getText();
-        const detectedClasses = this.detector.detectAll(text);
-        const { useStatements } = this.parser.parse(editor.document);
-
+        const document = editor.document;
+        const used = this.detector.namesUsedByCode(document.getText());
+        const { useStatements } = this.parser.parse(document);
         const ignoreList = getConfig('ignoreList');
-        const unusedStatements = useStatements.filter(
-            stmt => stmt.kind === 'class' &&
-                !ignoreList.includes(stmt.className) &&
-                !detectedClasses.includes(stmt.className) &&
-                !text.includes(`${stmt.className}\\`)
-        );
 
-        if (unusedStatements.length === 0) {
+        const isUnused = (stmt: UseStatement) =>
+            stmt.kind === 'class' && !ignoreList.includes(stmt.className) && !used.has(stmt.className);
+
+        // Entries of one statement (a grouped or comma-separated import) share its text and line
+        const statements = new Map<number, UseStatement[]>();
+        for (const stmt of useStatements) {
+            statements.set(stmt.line, [...(statements.get(stmt.line) ?? []), stmt]);
+        }
+
+        let removed = 0;
+        const edits: { range: vscode.Range; replacement: string }[] = [];
+        for (const [line, entries] of statements) {
+            const unused = entries.filter(isUnused);
+            if (unused.length === 0) { continue; }
+            removed += unused.length;
+
+            const start = new vscode.Position(line, document.lineAt(line).firstNonWhitespaceCharacterIndex);
+            const end = document.positionAt(document.offsetAt(start) + entries[0].text.length);
+            if (unused.length === entries.length) {
+                const lastLine = document.lineAt(end.line);
+                edits.push({ range: new vscode.Range(new vscode.Position(line, 0), lastLine.rangeIncludingLineBreak.end), replacement: '' });
+            } else {
+                edits.push({ range: new vscode.Range(start, end), replacement: withoutEntries(entries[0].text, unused) });
+            }
+        }
+
+        if (edits.length === 0) {
             return 0;
         }
 
-        // Delete lines in reverse order to avoid shifting line numbers
-        const sortedUnused = [...unusedStatements].sort((a, b) => b.line - a.line);
-
         await editor.edit(textEdit => {
-            for (const stmt of sortedUnused) {
-                const line = stmt.line;
-                const range = editor.document.lineAt(line).rangeIncludingLineBreak;
-                textEdit.delete(range);
+            for (const edit of edits.sort((a, b) => b.range.start.line - a.range.start.line)) {
+                textEdit.replace(edit.range, edit.replacement);
             }
         });
 
         await this.cleanupBlankLines(editor);
 
-        return unusedStatements.length;
+        return removed;
     }
 
     private async cleanupBlankLines(editor: vscode.TextEditor): Promise<void> {
@@ -90,3 +106,4 @@ export class RemoveUnusedCommand {
         }
     }
 }
+

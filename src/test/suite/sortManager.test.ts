@@ -72,7 +72,7 @@ suite('SortManager (VS Code Integration)', () => {
     });
 
     test('should sort alphabetically when configured', async () => {
-        const config = vscode.workspace.getConfiguration('phpNamespaceResolver');
+        const config = vscode.workspace.getConfiguration('phpNamespaceMover');
         await config.update('sortMode', 'alphabetical', vscode.ConfigurationTarget.Global);
         await wait(500);
 
@@ -92,7 +92,7 @@ suite('SortManager (VS Code Integration)', () => {
     });
 
     test('should sort naturally when configured', async () => {
-        const config = vscode.workspace.getConfiguration('phpNamespaceResolver');
+        const config = vscode.workspace.getConfiguration('phpNamespaceMover');
         await config.update('sortMode', 'natural', vscode.ConfigurationTarget.Global);
         await wait(500);
 

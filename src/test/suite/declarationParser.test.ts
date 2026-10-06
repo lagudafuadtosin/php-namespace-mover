@@ -143,14 +143,14 @@ suite('DeclarationParser (VS Code Integration)', () => {
         assert.strictEqual(declarationLines.namespace, 1);
     });
 
-    test('should set phpTag but not namespace for <?php namespace on same line', async () => {
+    test('should read a namespace written on the <?php line', async () => {
         const doc = await createDocument(
             '<?php namespace App\\Controllers;\n\nclass Foo {}'
         );
         const { declarationLines } = parser.parse(doc);
-        // startsWith('<?php') fires first, so phpTag is set but namespace is not
+        // The line-based parser missed this namespace. The tokenized one reads it.
         assert.strictEqual(declarationLines.phpTag, 1);
-        assert.strictEqual(declarationLines.namespace, null);
+        assert.strictEqual(declarationLines.namespace, 1);
     });
 
     test('should return null for malformed use statement without semicolon', async () => {

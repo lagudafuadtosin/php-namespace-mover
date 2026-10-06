@@ -1,13 +1,18 @@
 import * as vscode from 'vscode';
-import { PhpClassDetector, sanitizeForDiagnostics } from '../core/PhpClassDetector';
+import { PhpClassDetector } from '../core/PhpClassDetector';
 import { DeclarationParser } from '../core/DeclarationParser';
 import { NamespaceCache } from '../core/NamespaceCache';
 import { DiagnosticCode, UseStatement } from '../types';
 import { builtInClasses } from '../data/builtInClasses';
 import { getConfig } from '../utils/config';
 
-const DIAGNOSTIC_SOURCE = 'PHP Namespace Resolver';
+const DIAGNOSTIC_SOURCE = 'PHP Namespace Mover';
 
+/**
+ * Warns about classes used without an import and imports that are never used. Positions come
+ * straight from the tokenized analysis, so a warning always sits on a real use of the class,
+ * never on a word inside a string, a comment or inline HTML.
+ */
 export class DiagnosticManager implements vscode.Disposable {
     private collection: vscode.DiagnosticCollection;
     private disposables: vscode.Disposable[] = [];
@@ -18,7 +23,7 @@ export class DiagnosticManager implements vscode.Disposable {
         private parser: DeclarationParser,
         private cache: NamespaceCache
     ) {
-        this.collection = vscode.languages.createDiagnosticCollection('phpNamespaceResolver');
+        this.collection = vscode.languages.createDiagnosticCollection('phpNamespaceMover');
 
         this.disposables.push(
             cache.onDidFinishIndexing(() => this.refreshVisible()),
@@ -54,21 +59,17 @@ export class DiagnosticManager implements vscode.Disposable {
 
         const text = document.getText();
         const ignoreList = getConfig('ignoreList');
-        const detectedClasses = this.detector.detectAll(text).filter(cls => !ignoreList.includes(cls));
         const { useStatements } = this.parser.parse(document);
         const classUseStatements = useStatements.filter(s => s.kind === 'class');
 
         const diagnostics: vscode.Diagnostic[] = [];
 
         if (this.cache.indexed && getConfig('highlightNotImported')) {
-            const importedClasses = classUseStatements.map(s => s.className);
-            const currentNamespace = this.parser.getNamespace(document);
-            const declaredClasses = this.parser.getDeclaredClassNames(document);
-            diagnostics.push(...this.getNotImportedDiagnostics(document, text, detectedClasses, importedClasses, currentNamespace, declaredClasses));
+            diagnostics.push(...this.getNotImportedDiagnostics(document, text, classUseStatements, ignoreList));
         }
         if (getConfig('highlightNotUsed')) {
-            const filteredUseStatements = classUseStatements.filter(s => !ignoreList.includes(s.className));
-            diagnostics.push(...this.getNotUsedDiagnostics(document, text, detectedClasses, filteredUseStatements));
+            const filtered = classUseStatements.filter(s => !ignoreList.includes(s.className));
+            diagnostics.push(...this.getNotUsedDiagnostics(document, text, filtered));
         }
 
         this.collection.set(document.uri, diagnostics);
@@ -93,85 +94,55 @@ export class DiagnosticManager implements vscode.Disposable {
         this.collection.dispose();
     }
 
-    private isInSameNamespace(className: string, currentNamespace: string | null): boolean {
+    /**
+     * True when the short name already resolves without an import: a class declared in the
+     * current namespace or, in a file without a namespace, a global class (built in or from
+     * the project).
+     */
+    private resolvesWithoutImport(className: string, currentNamespace: string | null): boolean {
         if (!currentNamespace) {
-            return builtInClasses.has(className);
+            if (builtInClasses.has(className)) { return true; }
+            return this.cache.lookup(className).some(e => e.fqcn === className);
         }
-
-        const entries = this.cache.lookup(className);
-        return entries.some(e => e.fqcn === `${currentNamespace}\\${className}`);
+        return this.cache.lookup(className).some(e => e.fqcn === `${currentNamespace}\\${className}`);
     }
 
     private getNotImportedDiagnostics(
         document: vscode.TextDocument,
         text: string,
-        detectedClasses: string[],
-        importedClasses: string[],
-        currentNamespace: string | null,
-        declaredClasses: string[]
+        useStatements: UseStatement[],
+        ignoreList: string[]
     ): vscode.Diagnostic[] {
-        const notImported = detectedClasses.filter(cls =>
-            !importedClasses.includes(cls) &&
-            !declaredClasses.includes(cls) &&
-            !this.isInSameNamespace(cls, currentNamespace)
-        );
-
-        const sanitized = sanitizeForDiagnostics(text);
+        const imported = new Set(useStatements.map(s => s.className));
+        const declared = new Set(this.parser.getDeclaredClassNames(document));
+        const currentNamespace = this.parser.getNamespace(document);
+        const verdicts = new Map<string, boolean>();
         const diagnostics: vscode.Diagnostic[] = [];
 
-        for (const className of notImported) {
-            const regex = new RegExp(
-                `(?<![a-zA-Z0-9_\\\\])${escapeRegex(className)}(?![a-zA-Z0-9_\\\\])`,
-                'g'
-            );
-            let match: RegExpExecArray | null;
-
-            // Scan sanitized text so matches inside strings/comments are already blanked out
-            while ((match = regex.exec(sanitized)) !== null) {
-
-                const startPos = document.positionAt(match.index);
-                const textLine = document.lineAt(startPos);
-
-                if (/^(?:namespace|use)\s/.test(textLine.text)) {
-                    continue;
-                }
-
-                // Defense-in-depth: skip lines that are clearly comment-only
-                const trimmedLine = textLine.text.trimStart();
-                if (
-                    trimmedLine.startsWith('//') ||
-                    (trimmedLine.startsWith('/*') && !trimmedLine.startsWith('/**')) ||
-                    (trimmedLine.startsWith('#') && !trimmedLine.startsWith('#['))
-                ) {
-                    continue;
-                }
-                // Skip PHPDoc description lines (e.g., "* Returns a Logger based on config")
-                // but keep @tag lines (e.g., "* @param Logger $logger")
-                if (trimmedLine.startsWith('*') && !/@[a-z]/.test(trimmedLine)) {
-                    continue;
-                }
-                const textBeforeMatch = textLine.text.substring(0, startPos.character);
-                if (textBeforeMatch.includes('//')) {
-                    continue;
-                }
-
-                const charBefore = textLine.text.charAt(startPos.character - 1);
-                if (/\w/.test(charBefore)) {
-                    continue;
-                }
-
-                const endPos = document.positionAt(match.index + match[0].length);
-                const range = new vscode.Range(startPos, endPos);
-
-                const diag = new vscode.Diagnostic(
-                    range,
-                    `Class '${className}' is not imported.`,
-                    vscode.DiagnosticSeverity.Warning
-                );
-                diag.code = DiagnosticCode.ClassNotImported;
-                diag.source = DIAGNOSTIC_SOURCE;
-                diagnostics.push(diag);
+        for (const usage of this.detector.detectAllWithPositions(text)) {
+            const className = usage.name;
+            let missing = verdicts.get(className);
+            if (missing === undefined) {
+                missing = !imported.has(className)
+                    && !declared.has(className)
+                    && !ignoreList.includes(className)
+                    && !this.resolvesWithoutImport(className, currentNamespace);
+                verdicts.set(className, missing);
             }
+            if (!missing) { continue; }
+
+            const range = new vscode.Range(
+                document.positionAt(usage.offset),
+                document.positionAt(usage.offset + className.length)
+            );
+            const diag = new vscode.Diagnostic(
+                range,
+                `Class '${className}' is not imported.`,
+                vscode.DiagnosticSeverity.Warning
+            );
+            diag.code = DiagnosticCode.ClassNotImported;
+            diag.source = DIAGNOSTIC_SOURCE;
+            diagnostics.push(diag);
         }
 
         return diagnostics;
@@ -180,38 +151,51 @@ export class DiagnosticManager implements vscode.Disposable {
     private getNotUsedDiagnostics(
         document: vscode.TextDocument,
         text: string,
-        detectedClasses: string[],
         useStatements: UseStatement[]
     ): vscode.Diagnostic[] {
-
+        const used = this.detector.namesUsedByCode(text);
         const diagnostics: vscode.Diagnostic[] = [];
 
         for (const stmt of useStatements) {
-            if (!detectedClasses.includes(stmt.className) &&
-                !text.includes(`${stmt.className}\\`)) {
-                const lineText = document.lineAt(stmt.line).text;
-                const startChar = lineText.lastIndexOf(stmt.className);
-                const range = new vscode.Range(
-                    stmt.line, Math.max(0, startChar),
-                    stmt.line, Math.max(0, startChar) + stmt.className.length
-                );
+            if (used.has(stmt.className)) { continue; }
 
-                const diag = new vscode.Diagnostic(
-                    range,
-                    `Imported class '${stmt.className}' is not used.`,
-                    vscode.DiagnosticSeverity.Warning
-                );
-                diag.code = DiagnosticCode.ClassNotUsed;
-                diag.source = DIAGNOSTIC_SOURCE;
-                diag.tags = [vscode.DiagnosticTag.Unnecessary];
-                diagnostics.push(diag);
-            }
+            const range = this.rangeOfName(document, stmt);
+            const diag = new vscode.Diagnostic(
+                range,
+                `Imported class '${stmt.className}' is not used.`,
+                vscode.DiagnosticSeverity.Warning
+            );
+            diag.code = DiagnosticCode.ClassNotUsed;
+            diag.source = DIAGNOSTIC_SOURCE;
+            diag.tags = [vscode.DiagnosticTag.Unnecessary];
+            diagnostics.push(diag);
         }
 
         return diagnostics;
     }
-}
 
-function escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    /** The range of an import's name (the alias, or the last segment) inside its statement. */
+    private rangeOfName(document: vscode.TextDocument, stmt: UseStatement): vscode.Range {
+        const statementStart = document.offsetAt(new vscode.Position(stmt.line, 0));
+        const statementText = document.getText().slice(statementStart, statementStart + stmt.text.length + 200);
+        const wanted = stmt.alias ?? stmt.fqcn.slice(stmt.fqcn.lastIndexOf('\\') + 1);
+        const pattern = new RegExp(`(?<![\\w\\\\$])${wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w\\\\])`, 'g');
+        let found = -1;
+        let m: RegExpExecArray | null;
+        const fqcnTail = stmt.fqcn.split('\\').slice(-1)[0];
+        while ((m = pattern.exec(statementText)) !== null) {
+            found = m.index;
+            const after = statementText.slice(m.index + wanted.length).trimStart();
+            if (stmt.alias || !after.toLowerCase().startsWith('as ')) {
+                if (wanted === fqcnTail || stmt.alias) { break; }
+            }
+        }
+        if (found === -1) {
+            return new vscode.Range(stmt.line, 0, stmt.line, 0);
+        }
+        return new vscode.Range(
+            document.positionAt(statementStart + found),
+            document.positionAt(statementStart + found + wanted.length)
+        );
+    }
 }

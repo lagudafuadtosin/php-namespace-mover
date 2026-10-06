@@ -61,7 +61,7 @@ suite('DiagnosticManager (VS Code Integration)', () => {
 
         for (const d of notImported) {
             assert.strictEqual(d.severity, vscode.DiagnosticSeverity.Warning);
-            assert.strictEqual(d.source, 'PHP Namespace Resolver');
+            assert.strictEqual(d.source, 'PHP Namespace Mover');
         }
     });
 
@@ -553,7 +553,7 @@ suite('DiagnosticManager (VS Code Integration)', () => {
     });
 
     test('should not produce "not imported" diagnostics for ignored classes', async () => {
-        const config = vscode.workspace.getConfiguration('phpNamespaceResolver');
+        const config = vscode.workspace.getConfiguration('phpNamespaceMover');
         await config.update('ignoreList', ['Yii'], vscode.ConfigurationTarget.Global);
 
         try {
@@ -574,7 +574,7 @@ suite('DiagnosticManager (VS Code Integration)', () => {
     });
 
     test('should not produce "not used" diagnostics for ignored classes', async () => {
-        const config = vscode.workspace.getConfiguration('phpNamespaceResolver');
+        const config = vscode.workspace.getConfiguration('phpNamespaceMover');
         await config.update('ignoreList', ['Yii'], vscode.ConfigurationTarget.Global);
 
         try {
@@ -595,7 +595,7 @@ suite('DiagnosticManager (VS Code Integration)', () => {
     });
 
     test('highlightNotImported: false should suppress all not-imported diagnostics', async () => {
-        const config = vscode.workspace.getConfiguration('phpNamespaceResolver');
+        const config = vscode.workspace.getConfiguration('phpNamespaceMover');
         await config.update('highlightNotImported', false, vscode.ConfigurationTarget.Global);
 
         try {
@@ -616,7 +616,7 @@ suite('DiagnosticManager (VS Code Integration)', () => {
     });
 
     test('highlightNotUsed: false should suppress all not-used diagnostics', async () => {
-        const config = vscode.workspace.getConfiguration('phpNamespaceResolver');
+        const config = vscode.workspace.getConfiguration('phpNamespaceMover');
         await config.update('highlightNotUsed', false, vscode.ConfigurationTarget.Global);
 
         try {

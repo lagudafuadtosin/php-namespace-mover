@@ -36,6 +36,21 @@ describe('PhpClassDetector', () => {
             assert.deepStrictEqual(detector.getFromFunctionParameters(text), ['Request']);
         });
 
+        it('should not hang on calls nested two deep (#128)', () => {
+            const text = '<?php\n$cache->set(' + 'trim($a), '.repeat(30) + 'json_encode(array_values($items)));\n'
+                + 'function handle(Request $request) {}';
+            const start = Date.now();
+            assert.deepStrictEqual(detector.getFromFunctionParameters(text), ['Request']);
+            assert.ok(Date.now() - start < 100);
+        });
+
+        it('should not hang on an unclosed parameter list while typing (#128)', () => {
+            const text = 'function handle(Request $request, $a = foo(1), $b = bar(2), $c = baz(3), $d = qux(4)';
+            const start = Date.now();
+            assert.deepStrictEqual(detector.getFromFunctionParameters(text), ['Request']);
+            assert.ok(Date.now() - start < 100);
+        });
+
         it('should detect multiple parameter type hints', () => {
             const text = 'function handle(Request $request, Response $response) {}';
             const result = detector.getFromFunctionParameters(text);

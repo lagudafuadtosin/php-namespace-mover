@@ -1,88 +1,101 @@
-<p align="center">
-  <img src="images/banner.png" alt="PHP Namespace Resolver" />
-</p>
+# PHP Namespace Mover
 
-# PHP Namespace Resolver
+Move or rename a PHP file and its namespace and every reference follow. It also imports, organizes and tidies your `use` statements, and it does not freeze VS Code.
 
-[![Version](https://vsmarketplacebadges.dev/version/MehediDracula.php-namespace-resolver.svg)](https://marketplace.visualstudio.com/items?itemName=MehediDracula.php-namespace-resolver)
-[![Installs](https://vsmarketplacebadges.dev/installs-short/MehediDracula.php-namespace-resolver.svg)](https://marketplace.visualstudio.com/items?itemName=MehediDracula.php-namespace-resolver)
-[![Rating](https://vsmarketplacebadges.dev/rating-short/MehediDracula.php-namespace-resolver.svg)](https://marketplace.visualstudio.com/items?itemName=MehediDracula.php-namespace-resolver)
+PHP Namespace Mover is built on [PHP Namespace Resolver](https://github.com/MehediDracula/PHP-Namespace-Resolver) by Mehedi Hasan, under the MIT licence. It is a separate extension and is not made or endorsed by him.
 
-Import, expand, sort, and manage PHP namespaces with full PHP 8+ support. Detects unimported and unused classes, offers quick fixes, and keeps your imports clean.
+## Move and rename
 
-## Features
+- **Move a file.** Drag a PHP file to another folder. Its namespace changes to match your `composer.json` (PSR-4 or PSR-0). Every `use` line, full class name and PHPDoc reference in your project changes with it.
+- **Rename a file.** Rename `User.php` to `Member.php`. The class becomes `Member`, and so does every use of it.
+- **Move a folder.** Every PHP file inside is updated the same way.
+- **Nothing breaks.** Files that shared the old namespace get the `use` line they now need. So does the moved file, for the classes it left behind.
+- **See it first.** Choose **Preview** to see every change side by side before anything is written. Or choose **Update** to go straight ahead.
 
-- **Import Class** — resolve and add `use` statements for any class
-- **Import All Classes** — detect and import every unresolved class in one go
-- **Expand Class** — replace a short class name with its fully qualified name inline
-- **Sort Imports** — sort `use` statements by length, alphabetically, or with natural ordering
-- **Remove Unused Imports** — strip all unused `use` statements with one command
-- **Generate Namespace** — generate a PSR-4/PSR-0 namespace from the file path and `composer.json`
-- **Diagnostics** — unimported classes appear as warnings and unused imports as hints in the Problems panel
-- **Quick Fixes** — lightbulb actions to import, expand, or remove directly from diagnostics
-- **Namespace Caching** — persistent index with file watcher for fast resolution
-- **Multi-Root Workspace** — file searching scoped to the correct workspace folder
+You can set this to ask, always update, or never update.
 
-### PHP 8+ Support
+## Imports
 
-Union types, intersection types, return types, typed properties, constructor promotion, nullable types, attributes, catch block types, and enum declarations are all detected and resolved.
+- **Import Class** adds the `use` line for the class under the cursor.
+- **Import All Classes** imports every class the file uses.
+- **Organize Imports** removes unused imports, adds missing ones that have only one match, and sorts. It works on save, from the command palette, and with VS Code's own Organize Imports.
+- **Expand Class** writes the full class name in place.
+- **Sort Imports** sorts by natural order, length or alphabet.
+- **Remove Unused Imports** removes what you do not use. It keeps the rest of a grouped import.
+- **Generate Namespace** writes the namespace for the file's folder from `composer.json`.
+- **Warnings** show classes that are used but not imported, and imports that are not used. Quick fixes are one click away.
 
-## Demo
+## Does not freeze
 
-![](https://i.imgur.com/upEGtPa.gif)
+PHP Namespace Mover reads PHP with a real tokenizer instead of guessing with patterns. A line like this used to freeze PHP Namespace Resolver for almost a minute:
+
+```php
+$cache->set(trim($a), trim($a), trim($a), trim($a), json_encode(array_values($items)));
+```
+
+Now it takes less than a millisecond. A file with 2,000 methods is read in under 100 ms.
+
+## Fixed from PHP Namespace Resolver
+
+Each of these has a test.
+
+- Freezing and high CPU: [#128](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/128), [#149](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/149), [#159](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/159)
+- Import on save did nothing: [#156](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/156)
+- `NULL` reported as a class: [#136](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/136)
+- A class used only in `@var` marked unused: [#138](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/138)
+- Classes inside `<?= ?>` marked unused: [#140](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/140)
+- Global classes flagged in files without a namespace: [#141](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/141)
+- Typed constants read as classes: [#146](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/146)
+- Imports placed inside anonymous Livewire classes: [#151](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/151)
+- `use Carbon\Carbon;` could not be removed: [#152](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/152)
+- Words in HTML flagged as classes: [#153](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/153)
+- `private(set)` promoted properties marked unused: [#160](https://github.com/MehediDracula/PHP-Namespace-Resolver/issues/160)
+
+## Coming from PHP Namespace Resolver
+
+Your settings carry over. Turn PHP Namespace Resolver off, because both use the same shortcuts.
 
 ## Commands
 
-Search these commands by the title on command palette.
-
-| Command | Title |
-|---------|-------|
-| `phpNamespaceResolver.import` | Import Class |
-| `phpNamespaceResolver.importAll` | Import All Classes |
-| `phpNamespaceResolver.expand` | Expand Class |
-| `phpNamespaceResolver.sort` | Sort Imports |
-| `phpNamespaceResolver.removeUnused` | Remove Unused Imports |
-| `phpNamespaceResolver.generateNamespace` | Generate Namespace |
-| `phpNamespaceResolver.rebuildIndex` | Rebuild Namespace Index |
-
-## Keybindings
-
-You can override these defaults in your `keybindings.json`.
-
-| Command | Windows / Linux | Mac |
-|---------|-----------------|-----|
-| Import Class | `Ctrl+Alt+I` | `⌃⌥I` |
-| Import All Classes | `Ctrl+Alt+A` | `⌃⌥A` |
-| Expand Class | `Ctrl+Alt+E` | `⌃⌥E` |
-| Sort Imports | `Ctrl+Alt+S` | `⌃⌥S` |
-| Remove Unused Imports | `Ctrl+Alt+R` | `⌃⌥R` |
-| Generate Namespace | `Ctrl+Alt+G` | `⌃⌥G` |
+| Command | Shortcut |
+|---|---|
+| Import Class | `Ctrl+Alt+I` |
+| Import All Classes | `Ctrl+Alt+A` |
+| Expand Class | `Ctrl+Alt+E` |
+| Sort Imports | `Ctrl+Alt+S` |
+| Generate Namespace | `Ctrl+Alt+G` |
+| Remove Unused Imports | `Ctrl+Alt+R` |
+| Organize Imports | |
+| Rebuild Namespace Index | |
 
 ## Settings
 
-You can override these defaults in your VS Code settings.
+| Setting | Default | What it does |
+|---|---|---|
+| `phpNamespaceMover.updateReferencesOnMove` | `ask` | After a move or rename: `ask`, `always` or `never` update |
+| `phpNamespaceMover.sortOnSave` | `false` | Sort imports on save |
+| `phpNamespaceMover.removeOnSave` | `false` | Remove unused imports on save |
+| `phpNamespaceMover.autoImportOnSave` | `false` | Import classes that have only one match on save |
+| `phpNamespaceMover.autoSort` | `true` | Sort after adding an import |
+| `phpNamespaceMover.sortMode` | `natural` | `natural`, `length` or `alphabetical` |
+| `phpNamespaceMover.leadingSeparator` | `true` | Start expanded class names with `\` |
+| `phpNamespaceMover.highlightNotImported` | `true` | Warn about classes that are not imported |
+| `phpNamespaceMover.highlightNotUsed` | `true` | Warn about imports that are not used |
+| `phpNamespaceMover.ignoreList` | `[]` | Class names to leave out of warnings |
+| `phpNamespaceMover.exclude` | `**/node_modules/**` | Files to skip when looking for classes |
 
-```jsonc
-{
-    "phpNamespaceResolver.exclude": "**/node_modules/**",  // Glob pattern to exclude when searching files
-    "phpNamespaceResolver.autoSort": true,                 // Auto sort after importing a class
-    "phpNamespaceResolver.sortOnSave": false,              // Sort imports when a file is saved
-    "phpNamespaceResolver.sortMode": "natural",            // Sort mode: "natural", "length", or "alphabetical"
-    "phpNamespaceResolver.leadingSeparator": true,         // Prepend leading backslash when expanding
-    "phpNamespaceResolver.removeOnSave": false,            // Remove unused imports on save
-    "phpNamespaceResolver.autoImportOnSave": false,        // Auto import all detected classes on save
-    "phpNamespaceResolver.ignoreList": [],                 // Class names to exclude from diagnostics (e.g. ["Yii"])
-    "phpNamespaceResolver.highlightNotImported": true,     // Show warnings for unimported classes
-    "phpNamespaceResolver.highlightNotUsed": true          // Show hints for unused imports
-}
-```
+## Privacy
 
-## Author
+PHP Namespace Mover makes no network requests and collects nothing. It only reads the PHP files in your workspace.
 
-- [@MehediDracula](https://twitter.com/MehediDracula)
+## Credit
 
-## License
+PHP Namespace Resolver was created by Mehedi Hasan ([MehediDracula](https://github.com/MehediDracula)) and its contributors. PHP Namespace Mover keeps its history. Thanks also to the people who reported the issues above, and to those who first found the cause of the freeze in #149 and #159.
 
-[MIT](LICENSE) License.
+## Licence
 
-Copyright (c) 2017 Mehedi Hasan
+MIT, the same as PHP Namespace Resolver. See [LICENSE](LICENSE).
+
+## Problems and ideas
+
+[Open an issue](https://github.com/lagudafuadtosin/php-namespace-mover/issues).

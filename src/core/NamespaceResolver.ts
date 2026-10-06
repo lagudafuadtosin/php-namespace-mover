@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ResolvedNamespace } from '../types';
 import { builtInClasses } from '../data/builtInClasses';
+import { declaredClasses } from './php/analysis';
 import { getConfig } from '../utils/config';
 import { NamespaceCache } from './NamespaceCache';
 
@@ -85,24 +86,20 @@ export class NamespaceResolver {
             try {
                 const raw = await vscode.workspace.fs.readFile(file);
                 const text = Buffer.from(raw).toString('utf8');
-                const namespace = this.extractNamespace(text);
 
-                if (namespace) {
-                    const fqcn = `${namespace}\\${className}`;
-                    if (!seen.has(fqcn)) {
-                        seen.add(fqcn);
+                // The file's own declaration of the class, in whichever namespace block it is.
+                // Global classes are left to the 'global' result in resolve().
+                for (const declared of declaredClasses(text)) {
+                    if (declared.className !== className || !declared.fqcn.includes('\\')) { continue; }
+                    if (!seen.has(declared.fqcn)) {
+                        seen.add(declared.fqcn);
                         const source = file.fsPath.replace(/\\/g, '/').includes('/vendor/') ? 'vendor' : 'project';
-                        results.push({ fqcn, source });
+                        results.push({ fqcn: declared.fqcn, source });
                     }
                 }
             } catch {}
         }
 
         return results;
-    }
-
-    private extractNamespace(text: string): string | null {
-        const match = text.match(/^(?:namespace|<\?php\s+namespace)\s+(.+?);/m);
-        return match ? match[1].trim() : null;
     }
 }

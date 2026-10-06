@@ -31,23 +31,7 @@ export class SortManager {
 
         if (target.length <= 1) { return []; }
 
-        const mode = getConfig('sortMode');
-
-        const classStmts = this.sortStatements(target.filter(s => s.kind === 'class'), mode);
-        const funcStmts = this.sortStatements(target.filter(s => s.kind === 'function'), mode);
-        const constStmts = this.sortStatements(target.filter(s => s.kind === 'const'), mode);
-
-        const groups = [classStmts, funcStmts, constStmts].filter(g => g.length > 0);
-        // Deduplicate grouped imports (e.g. use App\{Foo, Bar}; produces multiple statements with the same line)
-        const dedupe = (stmts: UseStatement[]) => {
-            const seen = new Set<number>();
-            return stmts.filter(s => {
-                if (seen.has(s.line)) { return false; }
-                seen.add(s.line);
-                return true;
-            });
-        };
-        const sortedLines = groups.map(g => dedupe(g).map(s => s.text).join('\n')).join('\n\n');
+        const sortedLines = this.renderSorted(target);
 
         // Replace the entire use block range (eliminates blank line gaps)
         const firstLine = declarationLines.firstUseStatement! - 1;
@@ -60,6 +44,28 @@ export class SortManager {
                 sortedLines
             )
         ];
+    }
+
+    /** The imports as one sorted block: classes, then functions, then constants. */
+    renderSorted(target: UseStatement[]): string {
+        const mode = getConfig('sortMode');
+
+        const classStmts = this.sortStatements(target.filter(s => s.kind === 'class'), mode);
+        const funcStmts = this.sortStatements(target.filter(s => s.kind === 'function'), mode);
+        const constStmts = this.sortStatements(target.filter(s => s.kind === 'const'), mode);
+
+        const groups = [classStmts, funcStmts, constStmts].filter(g => g.length > 0);
+        // Entries of one grouped import (use App\{Foo, Bar};) share a line and text: keep it once
+        const dedupe = (stmts: UseStatement[]) => {
+            const seen = new Set<string>();
+            return stmts.filter(s => {
+                const key = `${s.line}:${s.text}`;
+                if (seen.has(key)) { return false; }
+                seen.add(key);
+                return true;
+            });
+        };
+        return groups.map(g => dedupe(g).map(s => s.text).join('\n')).join('\n\n');
     }
 
     private sortStatements(statements: UseStatement[], mode: SortMode): UseStatement[] {

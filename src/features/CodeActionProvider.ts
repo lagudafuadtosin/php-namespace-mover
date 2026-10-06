@@ -15,7 +15,7 @@ export class PhpCodeActionProvider implements vscode.CodeActionProvider {
         const actions: vscode.CodeAction[] = [];
 
         for (const diagnostic of context.diagnostics) {
-            if (diagnostic.source !== 'PHP Namespace Resolver') {
+            if (diagnostic.source !== 'PHP Namespace Mover') {
                 continue;
             }
 
@@ -39,7 +39,7 @@ export class PhpCodeActionProvider implements vscode.CodeActionProvider {
             vscode.CodeActionKind.QuickFix
         );
         importAction.command = {
-            command: 'phpNamespaceResolver.import',
+            command: 'phpNamespaceMover.import',
             title: 'Import Class',
         };
         importAction.diagnostics = [diagnostic];
@@ -51,7 +51,7 @@ export class PhpCodeActionProvider implements vscode.CodeActionProvider {
             vscode.CodeActionKind.QuickFix
         );
         expandAction.command = {
-            command: 'phpNamespaceResolver.expand',
+            command: 'phpNamespaceMover.expand',
             title: 'Expand Class',
         };
         expandAction.diagnostics = [diagnostic];
@@ -68,7 +68,7 @@ export class PhpCodeActionProvider implements vscode.CodeActionProvider {
             vscode.CodeActionKind.QuickFix
         );
         removeOneAction.command = {
-            command: 'phpNamespaceResolver.removeUnused',
+            command: 'phpNamespaceMover.removeUnused',
             title: 'Remove Unused Imports',
         };
         removeOneAction.diagnostics = [diagnostic];

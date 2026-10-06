@@ -15,6 +15,8 @@ import { GenerateNamespaceCommand } from './features/GenerateNamespaceCommand';
 import { RemoveUnusedCommand } from './features/RemoveUnusedCommand';
 import { DiagnosticManager } from './features/DiagnosticManager';
 import { PhpCodeActionProvider } from './features/CodeActionProvider';
+import { OrganizeImports } from './features/OrganizeImports';
+import { MoveFiles } from './features/MoveFiles';
 import { getConfig } from './utils/config';
 import { showStatusMessage, disposeStatusBar } from './utils/statusBar';
 
@@ -33,11 +35,12 @@ export function activate(context: vscode.ExtensionContext): void {
     const generateNsCommand = new GenerateNamespaceCommand(generator);
     const removeUnusedCommand = new RemoveUnusedCommand(detector, parser);
     const diagnosticManager = new DiagnosticManager(detector, parser, cache);
+    const organizeImports = new OrganizeImports(detector, parser, cache, sortManager);
 
     cache.initialize();
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('phpNamespaceResolver.import', async () => {
+        vscode.commands.registerCommand('phpNamespaceMover.import', async () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) { return; }
             if (editor.selections.length === 1) {
@@ -47,11 +50,11 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         }),
 
-        vscode.commands.registerCommand('phpNamespaceResolver.importAll', () => {
+        vscode.commands.registerCommand('phpNamespaceMover.importAll', () => {
             return importCommand.importAll();
         }),
 
-        vscode.commands.registerCommand('phpNamespaceResolver.expand', async () => {
+        vscode.commands.registerCommand('phpNamespaceMover.expand', async () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) { return; }
             if (editor.selections.length === 1) {
@@ -61,21 +64,21 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         }),
 
-        vscode.commands.registerCommand('phpNamespaceResolver.sort', () => {
+        vscode.commands.registerCommand('phpNamespaceMover.sort', () => {
             sortCommand.execute();
         }),
 
-        vscode.commands.registerCommand('phpNamespaceResolver.generateNamespace', () => {
+        vscode.commands.registerCommand('phpNamespaceMover.generateNamespace', () => {
             return generateNsCommand.execute();
         }),
 
-        vscode.commands.registerCommand('phpNamespaceResolver.removeUnused', () => {
+        vscode.commands.registerCommand('phpNamespaceMover.removeUnused', () => {
             return removeUnusedCommand.execute();
         }),
 
-        vscode.commands.registerCommand('phpNamespaceResolver.rebuildIndex', async () => {
+        vscode.commands.registerCommand('phpNamespaceMover.rebuildIndex', async () => {
             await cache.rebuild();
-            showStatusMessage('$(check) PHP Namespace Resolver: Index rebuilt.');
+            showStatusMessage('$(check) PHP Namespace Mover: Index rebuilt.');
         }),
     );
 
@@ -91,51 +94,41 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.workspace.onWillSaveTextDocument(event => {
             if (!event || event.document.languageId !== 'php') { return; }
 
-            const needsRemove = getConfig('removeOnSave');
-            const needsSort = getConfig('sortOnSave');
-            if (!needsRemove && !needsSort) { return; }
+            const options = {
+                remove: getConfig('removeOnSave'),
+                add: getConfig('autoImportOnSave'),
+                sort: getConfig('sortOnSave'),
+            };
+            if (!options.remove && !options.add && !options.sort) { return; }
 
-            event.waitUntil(((): Promise<vscode.TextEdit[]> => {
-                const document = event.document;
-                const { useStatements } = parser.parse(document);
-                if (useStatements.length === 0) { return Promise.resolve([]); }
+            event.waitUntil(Promise.resolve(organizeImports.computeEdits(event.document, options)));
+        }),
 
-                let stmtsToKeep = useStatements;
+        vscode.commands.registerCommand('phpNamespaceMover.organizeImports', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || editor.document.languageId !== 'php') { return; }
+            const edits = organizeImports.computeEdits(editor.document, { remove: true, add: true, sort: true });
+            if (edits.length === 0) { showStatusMessage('$(check) Imports are already organized.'); return; }
+            await editor.edit(builder => edits.forEach(e => builder.replace(e.range, e.newText)));
+        }),
 
-                // Filter out unused class imports
-                if (needsRemove) {
-                    const text = document.getText();
-                    const detectedClasses = detector.detectAll(text);
-                    const ignoreList = getConfig('ignoreList');
-                    stmtsToKeep = useStatements.filter(stmt => {
-                        if (stmt.kind !== 'class') { return true; }
-                        if (ignoreList.includes(stmt.className)) { return true; }
-                        if (detectedClasses.includes(stmt.className)) { return true; }
-                        if (text.includes(`${stmt.className}\\`)) { return true; }
-                        return false;
-                    });
-                }
-
-                // Sort remaining imports (or just sort without remove)
-                if (needsSort && stmtsToKeep.length > 1) {
-                    return Promise.resolve(sortManager.computeSortEdits(document, stmtsToKeep));
-                }
-
-                // Remove-only: delete unused lines (reverse order for stable line numbers)
-                if (needsRemove && stmtsToKeep.length < useStatements.length) {
-                    const removed = useStatements.filter(s => !stmtsToKeep.includes(s));
-                    const edits = removed
-                        .sort((a, b) => b.line - a.line)
-                        .map(stmt => vscode.TextEdit.delete(document.lineAt(stmt.line).rangeIncludingLineBreak));
-                    return Promise.resolve(edits);
-                }
-
-                return Promise.resolve([]);
-            })());
-        })
+        vscode.languages.registerCodeActionsProvider(
+            { language: 'php', scheme: 'file' },
+            {
+                provideCodeActions(document) {
+                    const edits = organizeImports.computeEdits(document, { remove: true, add: true, sort: true });
+                    if (edits.length === 0) { return []; }
+                    const action = new vscode.CodeAction('Organize imports', vscode.CodeActionKind.SourceOrganizeImports);
+                    action.edit = new vscode.WorkspaceEdit();
+                    action.edit.set(document.uri, edits);
+                    return [action];
+                },
+            },
+            { providedCodeActionKinds: [vscode.CodeActionKind.SourceOrganizeImports] }
+        )
     );
 
-    context.subscriptions.push(cache, diagnosticManager);
+    context.subscriptions.push(cache, diagnosticManager, new MoveFiles(cache));
 }
 
 export function deactivate(): void {
