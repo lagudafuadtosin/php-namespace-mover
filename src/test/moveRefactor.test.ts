@@ -149,6 +149,42 @@ class UserController
         assert.strictEqual(out.get('other.php'), other);
     });
 
+    it('updates a name that reaches the class through an imported namespace', () => {
+        const c = `<?php\n\nnamespace App\\Http;\n\nuse App\\Models;\n\nclass C\n{\n    public function f() { return new Models\\User(); }\n}\n`;
+        const out = run({
+            moved: { uri: 'User.php', text: USER },
+            newNamespace: 'App\\Domain',
+            newClassName: 'User',
+            oldNamespaceSiblings: [],
+            files: [{ uri: 'C.php', text: c }],
+        });
+        assert.ok(out.get('C.php')!.includes('return new \\App\\Domain\\User();'), out.get('C.php'));
+    });
+
+    it('updates a name relative to the file\'s own namespace', () => {
+        const c = `<?php\n\nnamespace App;\n\nclass C\n{\n    public function f() { return new Models\\User(); }\n}\n`;
+        const out = run({
+            moved: { uri: 'User.php', text: USER },
+            newNamespace: 'App\\Domain',
+            newClassName: 'User',
+            oldNamespaceSiblings: [],
+            files: [{ uri: 'C.php', text: c }],
+        });
+        assert.ok(out.get('C.php')!.includes('return new \\App\\Domain\\User();'), out.get('C.php'));
+    });
+
+    it('keeps the imported namespace when the class stays under it', () => {
+        const c = `<?php\n\nnamespace App\\Http;\n\nuse App\\Models;\n\nfunction f(Models\\User $u) {}\n`;
+        const out = run({
+            moved: { uri: 'User.php', text: USER },
+            newNamespace: 'App\\Models',
+            newClassName: 'Member',
+            oldNamespaceSiblings: [],
+            files: [{ uri: 'C.php', text: c }],
+        });
+        assert.ok(out.get('C.php')!.includes('function f(Models\\Member $u)'), out.get('C.php'));
+    });
+
     it('returns no plan when nothing changes', () => {
         assert.strictEqual(planMove({
             moved: { uri: 'User.php', text: USER },

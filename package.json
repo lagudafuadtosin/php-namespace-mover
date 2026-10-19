@@ -2,7 +2,7 @@
     "name": "php-namespace-mover",
     "displayName": "PHP Namespace Mover",
     "description": "Move or rename a PHP file and its namespace, class and every use statement update. A maintained rebuild of PHP Namespace Resolver: import class, organize imports, remove unused, without freezing VS Code.",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "publisher": "lagudafuadtosin",
     "author": "Fuad Laguda",
     "license": "MIT",

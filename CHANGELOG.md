@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- Moving a class also updates names that reach it through an imported namespace (`use App\Models;` then `Models\User`) or through the file's own namespace (from Intelephense #2480).
+
 ## 1.0.1
 
 - Clearer store listing: the description and search words say what it does and that it rebuilds PHP Namespace Resolver. No code changes.

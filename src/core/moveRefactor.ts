@@ -166,6 +166,25 @@ function planFile(
         changes.push({ start: writtenStart, end: u.end, text: leading + newFqcn });
     }
 
+    // 5. Relative names that reach the class through an imported namespace (`use App\Models;`
+    //    then `Models\User`) or through this file's own namespace (`Models\User` in `App`)
+    const prefixes = [
+        ...analysis.imports.flatMap(s => s.entries.filter(e => e.kind === 'class').map(e => ({ path: e.fqcn.replace(/^\\/, ''), as: e.className }))),
+        ...(fileNamespace ? [{ path: fileNamespace, as: '' }] : []),
+    ];
+    for (const u of analysis.usages) {
+        if (!u.qualified || u.kind === 'namespacePrefix' || u.written.startsWith('\\')) { continue; }
+        const writtenStart = u.end - u.written.length;
+        if (seen.has(writtenStart)) { continue; }
+        const first = u.written.slice(0, u.written.indexOf('\\'));
+        const via = prefixes.find(p => (p.as ? p.as.toLowerCase() === first.toLowerCase() && same(`${p.path}${u.written.slice(first.length)}`, oldFqcn)
+            : same(`${p.path}\\${u.written}`, oldFqcn)));
+        if (!via) { continue; }
+        seen.add(writtenStart);
+        const keepsPrefix = via.as && newFqcn.toLowerCase().startsWith(via.path.toLowerCase() + '\\');
+        changes.push({ start: writtenStart, end: u.end, text: keepsPrefix ? via.as + newFqcn.slice(via.path.length) : '\\' + newFqcn });
+    }
+
     return changes;
 }
 
