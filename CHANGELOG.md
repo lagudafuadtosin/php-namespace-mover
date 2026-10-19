@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Clearer store listing: the description and search words say what it does and that it rebuilds PHP Namespace Resolver. No code changes.
+
 ## 1.0.0
 
 First release of PHP Namespace Mover, built on PHP Namespace Resolver 2.1.3.

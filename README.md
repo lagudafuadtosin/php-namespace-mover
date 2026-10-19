@@ -4,6 +4,8 @@ Move or rename a PHP file and its namespace and every reference follow. It also 
 
 PHP Namespace Mover is built on [PHP Namespace Resolver](https://github.com/MehediDracula/PHP-Namespace-Resolver) by Mehedi Hasan, under the MIT licence. It is a separate extension and is not made or endorsed by him.
 
+Coming from PHP Namespace Resolver? The commands do the same jobs, and your settings carry over.
+
 ## Move and rename
 
 - **Move a file.** Drag a PHP file to another folder. Its namespace changes to match your `composer.json` (PSR-4 or PSR-0). Every `use` line, full class name and PHPDoc reference in your project changes with it.
